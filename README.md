@@ -20,3 +20,111 @@
 ---
 
 无论是长线资产配置还是短线突击交易，**加密货币价格监测器**都是您最可靠的决策辅助。立即体验，让投资变得更简单、更从容！
+
+
+
+
+# CryptoAlert 项目技术文档
+
+## 1. 项目概述
+
+CryptoAlert 是一款基于 Android 平台的加密货币价格监控与提醒应用程序。它利用币安（Binance）API 获取实时市场数据，为用户提供关注列表、详细行情、交互式 K 线图表以及多维度的价格提醒功能。
+
+### 核心价值
+- **实时性**：通过高频轮询和前台服务确保价格监控的实时性。
+- **可靠性**：内置动态 API 路由机制，自动处理网络连接问题和区域限制。
+- **交互性**：提供功能丰富的 K 线图表，支持多种周期和技术指标。
+
+---
+
+## 2. 技术栈
+
+| 类别 | 技术选型 |
+| :--- | :--- |
+| **编程语言** | Kotlin |
+| **UI 框架** | Jetpack Compose (声明式 UI) |
+| **异步处理** | Kotlin Coroutines & Flow |
+| **依赖注入** | Hilt (Dagger) |
+| **网络请求** | Retrofit 2 + OkHttp 3 + GSON |
+| **本地数据库** | Room Persistence Library |
+| **背景任务** | WorkManager & Foreground Service |
+| **图表库** | MPAndroidChart (集成至 Compose) |
+| **图片加载** | Coil |
+
+---
+
+## 3. 架构设计
+
+项目遵循 **Clean Architecture** 原则，并采用 **MVVM (Model-View-ViewModel)** 模式。
+
+### 3.1 层次结构
+- **Data 层**：负责数据获取和持久化。包含 Retrofit 接口、Room 数据库定义及 Repository 的实现。
+- **Domain 层**：定义核心业务模型（Entities）和业务逻辑。
+- **UI 层**：负责视图渲染。包含 Compose Screens 和对应的 ViewModels。
+
+### 3.2 架构图
+```mermaid
+graph TD
+    subgraph UI_Layer
+        A[Compose Screens] --> B[ViewModels]
+    end
+    subgraph Domain_Layer
+        B --> C[Models]
+    end
+    subgraph Data_Layer
+        B --> D[CryptoRepository]
+        D --> E[BinanceApi - Remote]
+        D --> F[CryptoDao - Local]
+    end
+    F --> G[(Room DB)]
+    E --> H[Binance REST API]
+```
+
+---
+
+## 4. 核心功能实现
+
+### 4.1 动态 API 路由 (China Fix)
+为了应对特定区域的网络不稳定，项目实现了 `DynamicBaseUrlInterceptor`。
+- **机制**：拦截所有 API 请求，若当前域名连接失败，则自动按优先级尝试备用域名列表（如 `api1.binance.com`, `api.binance.vision` 等）。
+- **持久化**：成功连接的域名会被保存至 `SharedPreferences`，作为下次请求的首选域名。
+
+### 4.2 价格监控服务 (PriceMonitorService)
+采用 Android 前台服务（Foreground Service）确保监控在后台不被系统杀死。
+- **执行逻辑**：
+  1. 每隔一分钟（可配置）轮询一次用户设置的所有提醒。
+  2. 从 Binance API 获取最新价格。
+  3. 对比提醒条件：高于某价、低于某价、涨幅、跌幅。
+  4. 触发条件时，通过 `NotificationHelper` 发送系统通知并记录 `AlertHistory`。
+
+### 4.3 交互式 K 线图 (ChartScreen)
+集成 `MPAndroidChart` 库并封装在 Compose 的 `AndroidView` 中。
+- **功能特性**：
+  - **多周期支持**：15m, 1h, 4h, 1d, 1w 等。
+  - **技术指标**：内置 MA5, MA10, MA20 均线计算。
+  - **交互增强**：支持双指缩放、拖拽平移、十字线高亮显示详细数据面板。
+  - **延迟加载**：滑动到图表左侧时自动触发加载历史 K 线数据。
+
+---
+
+## 5. 数据库设计
+
+项目使用 Room 数据库，包含以下核心表结构：
+
+- **alerts**：存储用户的价格提醒设置。
+  - `symbol`, `abovePrice`, `belowPrice`, `risePercent`, `fallPercent`, `isEnabled`。
+- **favorite_coins**：存储用户关注的币种。
+  - `symbol`, `name`, `orderIndex` (支持排序)。
+- **alert_history**：存储已触发的提醒记录。
+  - `symbol`, `message`, `timestamp`。
+
+---
+
+## 6. 开发环境与配置
+
+- **IDE**: Android Studio Jellyfish (或更高版本)
+- **SDK**: Compile SDK 34, Min SDK 24
+- **Gradle**: Kotlin DSL (build.gradle.kts)
+- **网络配置**: `network_security_config.xml` 中配置了必要的域名白名单，支持明文/加密通信的灵活切换。
+
+---
